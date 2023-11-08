@@ -2,6 +2,7 @@
 
 from mmengine.runner import TestLoop
 from mmdet.registry import LOOPS
+from mmengine.model import is_model_wrapper
 
 # by lyz
 from mmengine.runner.amp import autocast
@@ -57,7 +58,10 @@ class TestLossLoop(TestLoop):
             'before_test_iter', batch_idx=idx, data_batch=data_batch)
         # outputs should be dict of loss
         with autocast(enabled=self.fp16):
-            losses = self.runner.model.test_loss_step(data_batch)
+            model = self.runner.model
+            if is_model_wrapper(model):
+                model = model.module
+            losses = model.test_loss_step(data_batch)
         self.evaluator.process(data_samples=[losses], data_batch=data_batch)
         self.runner.call_hook(
             'after_train_iter',

@@ -33,16 +33,9 @@ class CollectLossMetric(BaseMetric):
     # TODO: data_batch is no longer needed, consider adjusting the
     #  parameter position
     def process(self, data_batch: dict, data_samples: Sequence[dict]) -> None:
-        """Process one batch of data samples and predictions. The processed
-        results should be stored in ``self.results``, which will be used to
-        compute the metrics when all batches have been processed.
-
-        Args:
-            data_batch (dict): A batch of data from the dataloader.
-            data_samples (Sequence[dict]): A batch of data samples that
-                contain annotations and predictions.
-        """
-        self.results.append(data_samples)
+        # by lyz : make use of abstract function process(), data_samples inputted from TestLossLopp run_iter is [losses]
+        loss = data_samples
+        self.results.append(loss)
 
     def compute_metrics(self, results: list) -> Dict[str, float]:
         """Compute the metrics from processed results.

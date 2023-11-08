@@ -13,6 +13,8 @@ class SAM(torch.optim.Optimizer):
             self.base_optimizer = torch.optim.SGD(self.param_groups, **kwargs)
         elif base_optimizer == 'Adam':
             self.base_optimizer = torch.optim.Adam(self.param_groups, **kwargs)
+        elif base_optimizer == 'AdamW':
+            self.base_optimizer = torch.optim.AdamW(self.param_groups, **kwargs)
 
         self.param_groups = self.base_optimizer.param_groups
         self.defaults.update(self.base_optimizer.defaults)
@@ -25,9 +27,14 @@ class SAM(torch.optim.Optimizer):
 
             for p in group["params"]:
                 if p.grad is None: continue
-            #    self.state[p]["old_p"] = p.data.clone()
+                # grad_norm = ((torch.abs(p) if group["adaptive"] else 1.0) * p.grad).norm(p=2).to(p.device)
+                # weight_norm = p.norm(p=2)
+                # print(grad_norm)
+                # print(' ')
+                # print(weight_norm)
+                # print('\n')
+                self.state[p]["old_p"] = p.data.clone()
                 e_w = (torch.pow(p, 2) if group["adaptive"] else 1.0) * p.grad * scale.to(p)
-                self.state[p]["e_w"] = e_w
                 p.add_(e_w)  # climb to the local maximum "w + e(w)"
 
     @torch.no_grad()
@@ -35,7 +42,9 @@ class SAM(torch.optim.Optimizer):
         for group in self.param_groups:
             for p in group["params"]:
                 if p.grad is None: continue
-                p.add_(self.state[p]["e_w"], alpha = -1.0)  # get back to "w" from "w + e(w)"
+                if "old_p" not in self.state[p]: continue
+                p.data = self.state[p]["old_p"]   # get back to "w" from "w + e(w)"
+                self.state[p].pop("old_p")
 
         self.base_optimizer.step()  # do the actual "sharpness-aware" update
 

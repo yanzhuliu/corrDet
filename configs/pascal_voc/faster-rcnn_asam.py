@@ -9,7 +9,7 @@ model = dict(roi_head=dict(bbox_head=dict(num_classes=20)))
 # `_base_/datasets/voc0712.py`, so the actual epoch = 4 * 3 = 12
 max_epochs = 4
 train_cfg = dict(
-    type='EpochBasedTrainLoop', max_epochs=max_epochs, val_interval=1)
+    type='EpochBasedTrainLoop', max_epochs=max_epochs, val_interval=4)
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
 
@@ -24,13 +24,20 @@ param_scheduler = [
         gamma=0.1)
 ]
 
+train_dataloader = dict(
+    batch_size=32,
+    num_workers=2
+)
+
 # by lyz
 optim_wrapper = dict(
    type='SamOptimWrapper',
-   optimizer=dict(type='SAM', rho=0.01, adaptive=True, base_optimizer='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001))
+   optimizer=dict(type='SAM', rho=1, adaptive=True, base_optimizer='SGD', lr=0.01, momentum=0.9, weight_decay=0.0001))
 
 # Default setting for scaling LR automatically
 #   - `enable` means enable scaling LR automatically
 #       or not by default.
 #   - `base_batch_size` = (8 GPUs) x (2 samples per GPU).
 auto_scale_lr = dict(enable=False, base_batch_size=16)
+load_from = '../checkpoints/faster_rcnn_r50_fpn_1x_voc0712_20220320_192712-54bef0f3.pth'
+resume = False

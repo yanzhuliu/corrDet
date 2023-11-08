@@ -5,6 +5,7 @@ from .two_stage import TwoStageDetector
 from typing import Dict, Optional, Tuple, Union
 from mmengine.optim import OptimWrapper
 import torch
+from torch.nn.modules.batchnorm import _BatchNorm
 
 @MODELS.register_module()
 class SamFasterRCNN(TwoStageDetector):
@@ -29,14 +30,30 @@ class SamFasterRCNN(TwoStageDetector):
             init_cfg=init_cfg,
             data_preprocessor=data_preprocessor)
 
+    def disable_running_stats(self):
+        def _disable(module):
+            if isinstance(module, _BatchNorm):
+                module.backup_momentum = module.momentum
+                module.momentum = 0
+        self.apply(_disable)
+
+    def enable_running_stats(self):
+        def _enable(module):
+            if isinstance(module, _BatchNorm) and hasattr(module, "backup_momentum"):
+                module.momentum = module.backup_momentum
+        self.apply(_enable)
+
     def train_step(self, data: Union[dict, tuple, list],
                    optim_wrapper: OptimWrapper) -> Dict[str, torch.Tensor]:
+        self.enable_running_stats()
         with optim_wrapper.optim_context(self):
             data = self.data_preprocessor(data, True)
             losses = self._run_forward(data, mode='loss')
 
         parsed_losses, log_vars = self.parse_losses(losses)
         optim_wrapper.param_perturb(parsed_losses)
+
+        self.disable_running_stats()
         with optim_wrapper.optim_context(self):
             losses = self._run_forward(data, mode='loss')
         parsed_losses, log_vars = self.parse_losses(losses)

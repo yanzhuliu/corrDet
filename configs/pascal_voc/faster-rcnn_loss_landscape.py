@@ -13,6 +13,9 @@ train_cfg = dict(
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLossLoop')
 
+default_hooks = dict(
+    logger=dict(type='LoggerHook', interval=500))
+
 # learning rate
 param_scheduler = [
     dict(
@@ -28,7 +31,7 @@ custom_hooks = [dict(type='PlotLossHook')]#, dict(type='EmptyCacheHook', after_i
 # optimizer
 optim_wrapper = dict(
     type='LossOptimWrapper',
-    optimizer=dict(type='LandScape', x_min=-0.1, x_max=0.1, x_num=31, y_min=-0.1, y_max=0.1, y_num=31))
+    optimizer=dict(type='LandScape', x_min=-0.5, x_max=0.5, x_num=31, y_min=-0.5, y_max=0.5, y_num=31))
 
 # Default setting for scaling LR automatically
 #   - `enable` means enable scaling LR automatically

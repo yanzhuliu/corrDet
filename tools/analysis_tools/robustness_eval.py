@@ -140,10 +140,13 @@ def get_voc_style_results(filename, prints='mPC', aggregate='benchmark'):
     for i, distortion in enumerate(eval_output):
         for severity in eval_output[distortion]:
             mAP = [
-                eval_output[distortion][severity]['pascal_voc/mAP']
+                eval_output[distortion][severity]#['pascal_voc/mAP']
             #    for j in range(len(eval_output[distortion][severity]))
             ]
-            results[i, severity, :] = mAP
+            results[i, int(severity), :] = mAP
+            print(f'{distortion} - level {severity} : {mAP[0]:0.3f}')
+
+        print(f'{distortion} : {np.mean(results[i, 1:, :], axis=(0, 1)):0.3f}')
 
   #  P = results[0, 0, :]
     if aggregate == 'benchmark':

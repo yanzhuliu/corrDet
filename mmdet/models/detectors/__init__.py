@@ -16,9 +16,12 @@ from .ddod import DDOD
 from .deformable_detr import DeformableDETR
 from .detr import DETR
 from .dino import DINO
+from .dino_sam import SamDINO   # by lyz
 from .fast_rcnn import FastRCNN
 from .faster_rcnn import FasterRCNN
 from .faster_rcnn_sam import SamFasterRCNN  # by lyz
+from .faster_rcnn_wpdet import WpDetFasterRCNN # by lyz
+from .faster_rcnn_resdet import ResFasterRCNN
 from .faster_rcnn_loss_landscape import LossFasterRCNN  # by lyz
 from .fcos import FCOS
 from .fovea import FOVEA
@@ -69,5 +72,6 @@ __all__ = [
     'TwoStagePanopticSegmentor', 'PanopticFPN', 'QueryInst', 'LAD', 'TOOD',
     'MaskFormer', 'DDOD', 'Mask2Former', 'SemiBaseDetector', 'SoftTeacher',
     'RTMDet', 'Detectron2Wrapper', 'CrowdDet', 'CondInst', 'BoxInst',
-    'DetectionTransformer', 'ConditionalDETR', 'DINO', 'DABDETR', 'SamFasterRCNN', 'LossFasterRCNN'
+    'DetectionTransformer', 'ConditionalDETR', 'DINO', 'DABDETR',
+    'SamFasterRCNN', 'LossFasterRCNN', 'SamDINO', 'WpDetFasterRCNN', 'ResFasterRCNN'
 ]

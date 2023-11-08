@@ -64,7 +64,7 @@ def parse_args():
     parser.add_argument('--vlevel', default=0.5, type=float, help='plot contours every vlevel')
     parser.add_argument('--show', action='store_true', default=False, help='show plotted figures')
     parser.add_argument('--log', action='store_true', default=False, help='use log scale for loss values')
-    parser.add_argument('--plot', action='store_true', default=True, help='plot figures after computation')
+    parser.add_argument('--plot', action='store_true', default=False, help='plot figures after computation')
 
     # When using PyTorch version >= 2.0.0, the `torch.distributed.launch`
     # will pass the `--local-rank` parameter to `tools/train.py` instead

@@ -94,7 +94,7 @@ optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(
         type='AdamW',
-        lr=0.0001,  # 0.0002 for DeformDETR
+        lr=0.001,  # 0.0002 for DeformDETR
         weight_decay=0.0001),
     clip_grad=dict(max_norm=0.1, norm_type=2),
     paramwise_cfg=dict(custom_keys={'backbone': dict(lr_mult=0.1)})
@@ -117,6 +117,8 @@ param_scheduler = [
         milestones=[7],
         gamma=0.1)
 ]
+
+load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
 
 # NOTE: `auto_scale_lr` is for automatically scaling LR,
 # USER SHOULD NOT CHANGE ITS VALUES.

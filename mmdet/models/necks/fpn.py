@@ -6,7 +6,6 @@ import torch.nn.functional as F
 from mmcv.cnn import ConvModule
 from mmengine.model import BaseModule
 from torch import Tensor
-import torch
 
 from mmdet.registry import MODELS
 from mmdet.utils import ConfigType, MultiConfig, OptConfigType
@@ -117,33 +116,15 @@ class FPN(BaseModule):
         self.lateral_convs = nn.ModuleList()
         self.fpn_convs = nn.ModuleList()
 
-        # by lyz
-     #   self.reduce_convs = nn.ModuleList()
-     #   self.recover_convs = nn.ModuleList()
-        self.ln_convs = nn.ModuleList()
-        self.cube = []
-
         for i in range(self.start_level, self.backbone_end_level):
             l_conv = ConvModule(
                 in_channels[i],
-                255,
+                out_channels,
                 1,
                 conv_cfg=conv_cfg,
                 norm_cfg=norm_cfg if not self.no_norm_on_lateral else None,
                 act_cfg=act_cfg,
                 inplace=False)
-
-            ln_conv = ConvModule(
-                in_channels[i],
-                out_channels - 255,
-                1,
-                conv_cfg=conv_cfg,
-                norm_cfg=norm_cfg if not self.no_norm_on_lateral else None,
-                act_cfg=act_cfg,
-                inplace=False)
-
-            self.cube.append(torch.eye(in_channels[i], dtype=torch.float).unsqueeze(0).unsqueeze(2))
-
             fpn_conv = ConvModule(
                 out_channels,
                 out_channels,
@@ -154,28 +135,8 @@ class FPN(BaseModule):
                 act_cfg=act_cfg,
                 inplace=False)
 
-            # by lyz
-            # reduce_conv = ConvModule(
-            #     out_channels,
-            #     224,
-            #     1,
-            #     inplace=False)
-            #
-            # recover_conv = ConvModule(
-            #     224,
-            #     out_channels,
-            #     1,
-            #     inplace=False)
-
             self.lateral_convs.append(l_conv)
-            self.ln_convs.append(ln_conv)
             self.fpn_convs.append(fpn_conv)
-
-            # by lyz
-            # self.reduce_convs.append(reduce_conv)
-            # self.recover_convs.append(recover_conv)
-
-
 
         # add extra conv layers (e.g., RetinaNet)
         extra_levels = num_outs - self.backbone_end_level + self.start_level
@@ -197,14 +158,6 @@ class FPN(BaseModule):
                     inplace=False)
                 self.fpn_convs.append(extra_fpn_conv)
 
-    def add_noise(self, feat):
-        feat_mean = feat.mean((2, 3), keepdim=True)
-        ones_mat = torch.ones_like(feat_mean)
-        alpha = torch.normal(ones_mat, 0.05 * ones_mat)
-        beta = torch.normal(ones_mat, 0.05 * ones_mat)
-        output = alpha * feat - alpha * feat_mean + beta * feat_mean
-        return output
-
     def forward(self, inputs: Tuple[Tensor]) -> tuple:
         """Forward function.
 
@@ -218,15 +171,10 @@ class FPN(BaseModule):
         assert len(inputs) == len(self.in_channels)
 
         # build laterals
-        # laterals = [
-        #     lateral_conv(inputs[i + self.start_level])
-        #     for i, lateral_conv in enumerate(self.lateral_convs)
-        # ]
-        laterals = []
-        for i in range(len(self.lateral_convs)):
-            laterals.append(torch.concat((self.lateral_convs[i](inputs[i + self.start_level]),
-            torch.matmul(inputs[i + self.start_level].permute(0,2,3,1),
-                         self.ln_convs[i](self.cube[i].to(inputs[i + self.start_level])).squeeze(0).permute(1,2,0)).permute(0,3,1,2)),1))
+        laterals = [
+            lateral_conv(inputs[i + self.start_level])
+            for i, lateral_conv in enumerate(self.lateral_convs)
+        ]
 
         # build top-down path
         used_backbone_levels = len(laterals)
@@ -246,7 +194,7 @@ class FPN(BaseModule):
         # part 1: from original levels
         outs = [
             self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels)
-        ]  # by lyz
+        ]
         # part 2: add extra levels
         if self.num_outs > len(outs):
             # use max pool to get more levels on top of outputs
@@ -264,10 +212,10 @@ class FPN(BaseModule):
                     extra_source = outs[-1]
                 else:
                     raise NotImplementedError
-                outs.append(self.fpn_convs[used_backbone_levels](extra_source))  # by lyz
+                outs.append(self.fpn_convs[used_backbone_levels](extra_source))
                 for i in range(used_backbone_levels + 1, self.num_outs):
                     if self.relu_before_extra_convs:
-                        outs.append(self.recover_convs[i](self.reduce_convs[i](self.fpn_convs[i](F.relu(outs[-1])))))
+                        outs.append(self.fpn_convs[i](F.relu(outs[-1])))
                     else:
-                        outs.append(self.recover_convs[i](self.reduce_convs[i](self.fpn_convs[i](outs[-1]))))  # by lyz
+                        outs.append(self.fpn_convs[i](outs[-1]))
         return tuple(outs)

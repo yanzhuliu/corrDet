@@ -20,7 +20,7 @@ def read_csv(file):
 for i in range(5):
     # set width of bar
     barWidth = 0.09
-    fig = plt.subplots(figsize=(12, 8))
+    fig = plt.figure()
 
     methods = read_csv('severity_' + str(i+1) + '.csv')
 
@@ -43,7 +43,7 @@ for i in range(5):
     plt.bar(br3, methods[2], width=barWidth,
         edgecolor='grey', label='augmix')
     plt.bar(br4, methods[3], width=barWidth,
-            edgecolor='grey', label='augmix_stylized')
+            edgecolor='grey', label='aug-stylized')
     plt.bar(br5, methods[4], width=barWidth,
         edgecolor='grey', label='SAM')
     plt.bar(br6, methods[5], width=barWidth,
@@ -56,10 +56,10 @@ for i in range(5):
             edgecolor='grey', label='Ours')
 
     # Adding Xticks
-    plt.xlabel('Severity level '+str(i+1)+' results', fontsize=20)
     plt.ylabel('mPC', fontsize=20)
     plt.xticks([r + barWidth for r in range(len(methods[0]))],
-           ['noise', 'blur', 'weather', 'digital'])
+           ['noise', 'blur', 'weather', 'digital'], fontsize=15)
+    plt.yticks(fontsize=12)
 
-    plt.legend(fontsize=16)
+    plt.legend(fontsize=10, ncol=2)
     plt.show()

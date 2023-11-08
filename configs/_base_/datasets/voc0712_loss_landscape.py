@@ -29,24 +29,34 @@ test_pipeline = [
 ]
 
 val_dataloader = dict(
-    batch_size=32,
-    num_workers=2,
+    batch_size=1,
+    num_workers=3,
     persistent_workers=True,
     drop_last=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
-  #  dataset=dict(
-  #      type='RepeatDataset',
-  #      times=3,
     dataset=dict(
-        type=dataset_type,
-        data_root=data_root,
-        ann_file='VOC2007/ImageSets/Main/train.txt',
-        data_prefix=dict(sub_data_root='VOC2007/'),
-        filter_cfg=dict(
-            filter_empty_gt=True, min_size=32, bbox_min_size=32),
-        pipeline=test_pipeline,
-        backend_args=backend_args),
-    )#)
+        type='ConcatDataset',
+        ignore_keys=['dataset_type'],
+        datasets=[
+            dict(
+                type=dataset_type,
+                data_root=data_root,
+                ann_file='VOC2007/ImageSets/Main/trainval.txt',
+                data_prefix=dict(sub_data_root='VOC2007/'),
+                filter_cfg=dict(
+                    filter_empty_gt=True, min_size=32, bbox_min_size=32),
+                pipeline=test_pipeline,
+                backend_args=backend_args),
+            # dict(
+            #     type=dataset_type,
+            #     data_root=data_root,
+            #     ann_file='VOC2012/ImageSets/Main/trainval.txt',
+            #     data_prefix=dict(sub_data_root='VOC2012/'),
+            #     filter_cfg=dict(
+            #         filter_empty_gt=True, min_size=32, bbox_min_size=32),
+            #     pipeline=test_pipeline,
+            #     backend_args=backend_args),
+            ]))
 
 test_dataloader = val_dataloader
 train_dataloader = val_dataloader

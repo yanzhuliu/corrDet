@@ -94,7 +94,7 @@ optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(
         type='AdamW',
-        lr=0.0001,  # 0.0002 for DeformDETR
+        lr=0.001,  # 0.0002 for DeformDETR
         weight_decay=0.0001),
     clip_grad=dict(max_norm=0.1, norm_type=2),
     paramwise_cfg=dict(custom_keys={'backbone': dict(lr_mult=0.1)})

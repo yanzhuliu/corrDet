@@ -185,7 +185,9 @@ def main():
             test_loader_cfg = copy.deepcopy(cfg.test_dataloader)
             # assign corruption and severity
             if corruption_severity > 0:
-                test_loader_cfg.dataset.data_prefix.sub_data_root = 'voc07test-'+str(corruption)+\
+          #      test_loader_cfg.dataset.data_prefix.img = 'images/val2017-'+str(corruption)+'-'+str(corruption_severity)+'/'
+                test_loader_cfg.dataset.data_prefix.sub_data_root = \
+                    'VOC2007-test/corruption/'+'voc07test-'+str(corruption)+\
                                                                     '-'+str(corruption_severity)+'/'
                 # corruption_trans = dict(
                 #     type='Corrupt',
