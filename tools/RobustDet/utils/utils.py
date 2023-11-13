@@ -53,6 +53,60 @@ class BatchIter:
                 targets = [ann for ann in targets]
         return images, targets
 
+class BatchPairIter:
+    def __init__(self, loader, cuda):
+        self.batch_iterator = iter(loader)
+        self.batch_size=loader.batch_size
+        self.loader = loader
+        self.cuda = cuda
+
+    def next(self):
+        try:
+            images_aug, images_org, targets = next(self.batch_iterator)
+        except StopIteration:
+            self.batch_iterator = iter(self.loader)
+            images_aug, images_org, targets = next(self.batch_iterator)
+
+        if self.cuda:
+            images_aug = images_aug.cuda()
+            images_org = images_org.cuda()
+            with torch.no_grad():
+                targets = [ann.cuda() for ann in targets]
+        else:
+            images_aug = images_aug
+            images_org = images_org
+            with torch.no_grad():
+                targets = [ann for ann in targets]
+
+        return images_aug, images_org, targets
+
+class BatchEvalIter:
+    def __init__(self, loader, cuda):
+        self.batch_iterator = iter(loader)
+        self.batch_size=loader.batch_size
+        self.loader = loader
+        self.cuda = cuda
+
+    def next(self):
+        try:
+            images, targets, sizes = next(self.batch_iterator)
+        except StopIteration:
+            self.batch_iterator = iter(self.loader)
+            images, targets, sizes = next(self.batch_iterator)
+
+        if self.cuda:
+            images = images.cuda()
+            sizes = sizes.cuda()
+            with torch.no_grad():
+                targets = [ann.cuda() for ann in targets]
+        else:
+            images = images
+            sizes = sizes.cuda()
+            with torch.no_grad():
+                targets = [ann for ann in targets]
+
+        return images, targets, sizes
+
 def get_logger(filename, verbosity=1, name=None):
     level_dict = {0: logging.DEBUG, 1: logging.INFO, 2: logging.WARNING}
     formatter = logging.Formatter(

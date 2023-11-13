@@ -1,0 +1,50 @@
+
+model:
+  backbone: 'vgg'
+  amp: False
+  cuda: True
+
+data:
+  dataset: 'COCO'
+  dataset_root: '/mnt/data/causal_rodc/data/coco2017/'
+  data_use: 'clean'
+  augment_folder: '2017_stylize'
+  num_workers: 8
+
+attack:
+  adv_type: 'clean'
+  atk_iters: 20
+  step_size: 8
+
+train:
+  basenet: 'ssd300_COCO_clean_final_300000.pth'
+  batch_size: 32
+  resume: null
+  start_iter: 0
+  multi_gpu: False
+  lr: 0.001
+  max_iter: 50000
+  momentum: 0.9
+  weight_decay: 0.0005
+  gamma: 0.1
+  focal: False
+  save_folder: 'weights/'
+  log_folder: 'logs/'
+  visdom: True
+  optimizer: 'DWP'
+  rho: 0.0001
+  alpha: 0.5
+  mtl: True
+  adv_rdp: False
+
+test:
+  trained_model: ''
+  save_folder: 'eval/'
+  confidence_threshold: 0.01
+  top_k: 5
+  robust: True
+  corruption: False
+  con_weights: [1.,1.]
+  save_tp_fp: None
+  log_folder: 'logs/'
+  batch_size: 640

@@ -51,6 +51,7 @@ class Detect(Function):
         # Decode predictions into bboxes.
         for i in range(num):
             decoded_boxes = decode(loc_data[i], prior_data, Detect.variance)
+
             # For each class, perform nms
             conf_scores = conf_preds[i].clone()
 

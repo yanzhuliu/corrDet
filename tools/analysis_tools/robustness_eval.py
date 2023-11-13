@@ -76,15 +76,20 @@ def get_coco_style_results(filename,
 
     for corr_i, distortion in enumerate(eval_output):
         for severity in eval_output[distortion]:
-            for metric_j, metric_name in enumerate(metrics):
-                metric_dict = eval_output[distortion][severity]
+            mAP = [eval_output[distortion][severity]]
+            results[corr_i, int(severity), :] = mAP
+            print(f'{distortion} - level {severity} : {mAP[0]:0.3f}')
+        print(f'{distortion} : {np.mean(results[corr_i, 1:, :], axis=(0, 1)):0.3f}')
 
-                new_metric_dict = {}
-                for k, v in metric_dict.items():
-                    if '/' in k:
-                        new_metric_dict[k.split('/')[-1]] = v
-                mAP = new_metric_dict['_'.join((task, metric_name))]
-                results[corr_i, severity, metric_j] = mAP
+            # for metric_j, metric_name in enumerate(metrics):
+            #     metric_dict = eval_output[distortion][severity]
+            #
+            #     new_metric_dict = {}
+            #     for k, v in metric_dict.items():
+            #         if '/' in k:
+            #             new_metric_dict[k.split('/')[-1]] = v
+            #     mAP = new_metric_dict['_'.join((task, metric_name))]
+            #     results[corr_i, severity, metric_j] = mAP
 
     P = results[0, 0, :]
     if aggregate == 'benchmark':

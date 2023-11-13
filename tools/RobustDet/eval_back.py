@@ -3,25 +3,23 @@
     @rbgirshick py-faster-rcnn https://github.com/rbgirshick/py-faster-rcnn
     Licensed under The MIT License [see LICENSE for details]
 """
-
+import torch
 import torch.backends.cudnn as cudnn
 from data import *
 from data import VOC_CLASSES as voc_labelmap
 from data import COCO_CLASSES as coco_labelmap
-
+import torch.utils.data as data
 from models import build_ssd, build_robust_ssd
-
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
 import sys
 import os
-import time
-import argparse
 import numpy as np
 import pickle
 from utils.utils import get_logger, Empty, Timer
 import cv2
 from utils.cfgParser import cfgParser
-
-from attack import *
+from utils.utils import *
 from robust import *
 
 if sys.version_info[0] == 2:
@@ -29,7 +27,7 @@ if sys.version_info[0] == 2:
 else:
     import xml.etree.ElementTree as ET
 
-cfgp = cfgParser()
+cfgp = cfgParser(base_block=['model', 'data'])
 args=cfgp.load_cfg(['test'])
 print(args)
 
@@ -39,7 +37,7 @@ if not os.path.exists(args.log_folder):
 if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)
 
-exp_name=f'{os.path.basename(args.trained_model[:-4])}_{args.adv_type}_PGD-{args.atk_iters}'
+exp_name=f'{os.path.basename(args.trained_model[:-4])}'
 logger = get_logger(os.path.join(args.log_folder, f'eval_{exp_name}.log'))
 
 # import amp
@@ -142,10 +140,10 @@ def do_python_eval(output_dir='output', use_07=True):
         score_list.extend(sorted_scores)
         aps += [ap]
         logger.info('AP for {} = {:.4f}'.format(cls, ap))
-        with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
-            pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
-    with open(f'./confidence_{exp_name}.pkl', 'wb') as f:
-        pickle.dump(score_list, f)
+    #    with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
+    #        pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
+    #with open(f'./confidence_{exp_name}.pkl', 'wb') as f:
+    #    pickle.dump(score_list, f)     by lyz
     logger.info('Mean AP = {:.4f}'.format(np.mean(aps)))
 
     logger.info('~~~~~~~~')
@@ -336,7 +334,7 @@ cachedir: Directory for caching the annotations
 
     return rec, prec, ap, sorted_scores
 
-def test_net_attack(save_folder, net, cuda, dataset, adv_type, corruption=None, corruption_severity=None):
+def test_net_attack(net, dataset, corruption=None, corruption_severity=None):
     num_images = len(dataset)
     # all detections are collected into:
     #    all_boxes[cls][image] = N x 5 array of detections in
@@ -347,63 +345,43 @@ def test_net_attack(save_folder, net, cuda, dataset, adv_type, corruption=None, 
     # timers
     _t = {'im_detect': Timer(), 'misc': Timer()}
     output_dir = get_output_dir('ssd300_120000', set_type)
-    det_file = os.path.join(output_dir, 'detections.pkl')
-
-    criterion_mlb = MultiBoxLoss(num_classes, 0.5, True, 0, True, 3, 0.5, False, args.cuda)
-    criterion_clsw = ClassWiseLoss(num_classes, 0.5, True, 0, True, 3, 0.5, False, args.cuda)
-    dataset_mean_t = torch.tensor(DATASET_MEANS).view(1, -1, 1, 1)
-    pgd = PGD(net, img_transform=(lambda x: x - dataset_mean_t, lambda x: x + dataset_mean_t))
-    pgd.set_para(eps=args.step_size, alpha=lambda:args.step_size, iters=args.atk_iters)
-
-    dag = DAG(net, img_transform=(lambda x: x - dataset_mean_t, lambda x: x + dataset_mean_t))
-    dag.set_para(gamma=lambda:0.5, iters=150)
-
-    adv_dict = {'clean': lambda:CleanGenerator(), 'cls': lambda:CLS_ADG(pgd, criterion_mlb), 'loc': lambda:LOC_ADG(pgd, criterion_mlb),
-                'con': lambda:CON_ADG(pgd, criterion_mlb, rate=args.con_weights),
-                'mtd': lambda:MTD(pgd, criterion_mlb),'cwat': lambda:CWAT(pgd, criterion_clsw), 'dag': lambda:AdvDataGenerator(dag, criterion_mlb)}
-    adv_generator = adv_dict[adv_type.lower()]()
 
     _t['im_detect'].tic()
+    data_loader = data.DataLoader(dataset, args.batch_size,
+                                  num_workers=args.num_workers,
+                                  shuffle=False, collate_fn=detection_collate, generator=torch.Generator(device='cuda'))
+    batch_iterator = BatchEvalIter(data_loader, args.cuda)
+    epoch_size = (len(dataset) + args.batch_size-1) // args.batch_size  # ceiling division
+    detections = []
+    sizes = []
     with torch.no_grad():
-        for i in range(num_images):
-            #im, gt, (w, h) = dataset.pull_item(i)
-            data_dict = dataset.pull_item(i, corruption, corruption_severity)  # by lyz
-            im = data_dict['img']
-            gt = data_dict['target']
-            (w, h) = data_dict['size']
-
-            x = im.unsqueeze(0)
-            if args.cuda:
-                x = x.cuda()
-                gt = [torch.FloatTensor(gt).cuda()]
-
-            net.phase = 'train'
-            with torch.enable_grad():
-                at_img = adv_generator.generate(x, gt)
+        for i in range(epoch_size):
+            logger.info('forward batch ' + str(i) +'/' + str(epoch_size))
+            images, _, sz = batch_iterator.next()
             net.phase = 'test'
             net.eval()
 
             with amp.autocast() if args.amp else Empty():
-                detections = net(at_img)
+                detections.append(net(images))
+                sizes.append(sz)
 
-            #cv2.imwrite('recons.png', (net.recons.detach().cpu().squeeze(0)+torch.tensor(DATASET_MEANS, device='cpu').view(-1,1,1)).permute(1,2,0).numpy()[:,:,(2,1,0)])
-            #cv2.imwrite('raw.png', (im.squeeze(0)+torch.tensor(DATASET_MEANS, device='cpu').view(-1,1,1)).permute(1,2,0).numpy()[:,:,(2,1,0)])
-            #0/0
-            # skip j = 0, because it's the background class
-
-            # line396: for j in range(1, detections.size(1)):   by lyz: all_boxes[0] 80 classes, detection.size(1) 201 cls pred.
-            # Lucky no any det as cls 81-200 so not runtime error occurs
+    detections = torch.concat(detections)
+    sizes = torch.concat(sizes)
+    (w, h) = sizes[:,0], sizes[:,1]
+    with torch.no_grad():
+        for i in range(num_images):
             for j in range(1, len(all_boxes)):
-                dets = detections[0, j, :]
-                mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
+                dets = detections[i, j, :]
+
+                mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()  # gt is greater than torch.gt, >
                 dets = torch.masked_select(dets, mask).view(-1, 5)
                 if dets.size(0) == 0:
                     continue
                 boxes = dets[:, 1:]
-                boxes[:, 0] *= w
-                boxes[:, 2] *= w
-                boxes[:, 1] *= h
-                boxes[:, 3] *= h
+                boxes[:, 0] *= w[i]
+                boxes[:, 2] *= w[i]
+                boxes[:, 1] *= h[i]
+                boxes[:, 3] *= h[i]
                 scores = dets[:, 0].cpu().numpy()
                 cls_dets = np.hstack((boxes.cpu().numpy(), scores[:, np.newaxis])).astype(np.float32,copy=False)
                 all_boxes[j][i] = cls_dets
@@ -412,9 +390,6 @@ def test_net_attack(save_folder, net, cuda, dataset, adv_type, corruption=None, 
                 detect_time = _t['im_detect'].toc(average=False)
                 logger.info('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,num_images, detect_time/100))
                 _t['im_detect'].tic()
-
-   # with open(det_file, 'wb') as f:   by lyz: not save detections.pkl
-   #     pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
 
     logger.info('Evaluating detections')
     if args.dataset=='VOC':
@@ -454,7 +429,6 @@ def evaluate_detections_coco(box_list, output_dir, dataset):
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 from io import StringIO
-import json
 
 def evaluate_coco(image_ids, bboxes, classes, probs):
     results = []
@@ -495,57 +469,6 @@ def evaluate_coco(image_ids, bboxes, classes, probs):
 
     return mean_ap, detail
 
-
-class COCOEvaluator:
-    def evaluate(self, path_to_results_dir, image_ids, bboxes, classes, probs):
-        self._write_results(path_to_results_dir, image_ids, bboxes, classes, probs)
-
-        return self.evaluate_file(path_to_results_dir)
-
-    def evaluate_file(self, path_to_results_dir):
-        annType = 'bbox'
-        path_to_coco_dir = args.dataset_root
-        path_to_annotations_dir = os.path.join(path_to_coco_dir, 'annotations')
-        path_to_annotation = os.path.join(path_to_annotations_dir, 'instances_val2017.json')
-
-        cocoGt = COCO(path_to_annotation)
-        cocoDt = cocoGt.loadRes(os.path.join(path_to_results_dir, 'results.json'))
-
-        cocoEval = COCOeval(cocoGt, cocoDt, annType)
-        cocoEval.evaluate()
-        cocoEval.accumulate()
-
-        original_stdout = sys.stdout
-        string_stdout = StringIO()
-        sys.stdout = string_stdout
-        cocoEval.summarize()
-        sys.stdout = original_stdout
-
-        mean_ap = cocoEval.stats[1].item()  # stats[1] records AP@[0.5]
-        detail = string_stdout.getvalue()
-
-        return mean_ap, detail
-
-    def _write_results(self, path_to_results_dir, image_ids, bboxes, classes, probs):
-        results = []
-        for image_id, bbox, cls, prob in zip(image_ids, bboxes, classes, probs):
-            results.append(
-                {
-                    'image_id': int(image_id),  # COCO evaluation requires `image_id` to be type `int`
-                    'category_id': cls,
-                    'bbox': [  # format [left, top, width, height] is expected
-                        bbox[0],
-                        bbox[1],
-                        bbox[2] - bbox[0],
-                        bbox[3] - bbox[1]
-                    ],
-                    'score': prob
-                }
-            )
-
-        with open(os.path.join(path_to_results_dir, 'results.json'), 'w') as f:
-            json.dump(results, f)
-
 if __name__ == '__main__':
     #print(get_voc_results_file_template(set_type, labelmap[3]))
     # load net
@@ -554,52 +477,59 @@ if __name__ == '__main__':
     #num_classes = len(labelmap) + 1                      # +1 for background
     num_classes = cfg['num_classes']
     if args.robust:
-        net = build_robust_ssd('test', 300, num_classes, CFR=args.cfr, CFR_layer=args.cfr_layer, K=args.k_count, backbone=args.backbone)
+        ssd_net = build_robust_ssd('test', 300, num_classes, CFR=args.cfr, CFR_layer=args.cfr_layer, K=args.k_count, backbone=args.backbone)
     else:
-        net = build_ssd('test', 300, num_classes, backbone=args.backbone)
-    net.load_state_dict(torch.load(args.trained_model))
-    net.eval()
-    #torch.save(net.decoder.state_dict(), 'weights/robust_decoder_15000_2.pth')
+        ssd_net = build_ssd('test', 300, num_classes, backbone=args.backbone)
+    ssd_net.load_state_dict(torch.load(args.trained_model))
+    net = ssd_net
 
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True
+
     logger.info('Finished loading model!')
+
+    net.eval()
+    #torch.save(net.decoder.state_dict(), 'weights/robust_decoder_15000_2.pth')
 
     # load data
     # evaluation
     corruptions = [
-        'snow', 'frost', 'fog', 'brightness', 'contrast',
         'gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur',
-        'glass_blur', 'motion_blur', 'zoom_blur',
-        'elastic_transform', 'pixelate', 'jpeg_compression'
+        'glass_blur', 'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog',
+        'brightness', 'contrast', 'elastic_transform', 'pixelate',
+        'jpeg_compression'
     ]
     severities = ['1','2','3','4','5']  # by lyz
 
     eval_folder=(process_names_voc if args.dataset == 'VOC' else process_names_coco)(args.data_use, type='test')
     for dadv in eval_folder:
         logger.info(f'evaluate {dadv} datas')
-        if args.dataset == 'VOC':
-            dataset_adv = VOCDetection(args.dataset_root, dadv, BaseTransform(300),
-                                       VOCAnnotationTransform(),
-                                       give_size=True)
-        else:
-            dataset_adv = COCODetection(args.dataset_root, dadv, BaseTransform(300),
-                                       COCOAnnotationTransform(), load_sizes=True,
-                                       give_size=True)
-        for adv_type in args.adv_type.split('/'):
-            if args.corruption is False:
-                test_net_attack(args.save_folder, net, args.cuda, dataset_adv, adv_type)
-            else:   # by lyz
-                aggregated_results = {}
-                for corr_i, corruption in enumerate(corruptions):
-                    aggregated_results[corruption] = {}
-                    for sev_i, corruption_severity in enumerate(severities):
-                        mAP = test_net_attack(args.save_folder, net, args.cuda, dataset_adv, adv_type, corruption, corruption_severity)
-                        aggregated_results[corruption][corruption_severity] = mAP
-                with open(os.path.join(args.log_folder, exp_name + '_results.pkl'), 'wb') as f:
-                    pickle.dump(aggregated_results, f)
+        if args.corruption is False:
+            if args.dataset == 'VOC':
+                dataset_adv = VOCDetectionEval(args.dataset_root, dadv, BaseTransform(300),
+                                               VOCAnnotationTransform(),
+                                               give_size=True)
+            else:
+                dataset_adv = COCODetectionEval(args.dataset_root, dadv, BaseTransform(300),
+                                            COCOAnnotationTransform(), load_sizes=True,
+                                            give_size=True)
+            test_net_attack(net, dataset_adv)
+        else:   # by lyz
+            aggregated_results = {}
+            for corr_i, corruption in enumerate(corruptions):
+                aggregated_results[corruption] = {}
+                for sev_i, corruption_severity in enumerate(severities):
+                    if args.dataset == 'VOC':
+                        dataset_adv = VOCDetectionEval(args.dataset_root, dadv, BaseTransform(300),
+                                                       VOCAnnotationTransform(),
+                                                       give_size=True, corruption=corruption, severity=corruption_severity)
+                    else:
+                        dataset_adv = COCODetectionEval(args.dataset_root, dadv, BaseTransform(300),
+                                                        COCOAnnotationTransform(), load_sizes=True,
+                                                        give_size=True)
 
-
-
-
+                    mAP = test_net_attack(net, dataset_adv, corruption, corruption_severity)
+                    aggregated_results[corruption][corruption_severity] = mAP
+            with open(os.path.join(args.log_folder, exp_name + '_results.pkl'), 'wb') as f:
+                pickle.dump(aggregated_results, f)
