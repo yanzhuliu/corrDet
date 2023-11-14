@@ -120,10 +120,10 @@ def train():
         with amp.autocast() if args.amp else Empty():
             if args.adv_rdp:
                 delta_x = images_aug - images_org
-                e_x = torch.rand(images_org.shape) * delta_x
+                e_x = torch.rand(images_org.shape) * 0.5 * delta_x
                 x_adv = images_org + e_x
-                inputs = torch.concat([images_org, images_aug, x_adv])
-                gt = targets + targets + targets
+                inputs = torch.concat([images_org, x_adv])
+                gt = targets + targets
                 out = net(inputs)
                 loss_l, loss_c = criterion(out, gt)
                 loss = loss_l + loss_c
@@ -186,13 +186,13 @@ def train():
                 optimizer.first_step(zero_grad=True)
 
                 delta_x = images_aug - images_org
-                e_x = torch.rand(images_org.shape) * delta_x
+                e_x = torch.rand(images_org.shape) * 0.5 * delta_x
                 x_adv = images_org + e_x
 
                 disable_running_stats(net)
-                out = net(torch.concat([images_org,images_aug,x_adv]))
-
-                loss_l, loss_c = criterion(out, targets+targets+targets)
+            #    out = net(torch.concat([images_org,images_aug,x_adv]))
+                out = net(torch.concat([images_org, x_adv]))
+                loss_l, loss_c = criterion(out, targets+targets)
                 loss = loss_l + loss_c
                 loss.backward()
                 optimizer.second_step(zero_grad=True)
